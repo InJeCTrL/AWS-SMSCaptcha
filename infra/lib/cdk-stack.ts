@@ -5,6 +5,7 @@ import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as sns from 'aws-cdk-lib/aws-sns'
 import * as path from 'path'
 import { Runtime } from 'aws-cdk-lib/aws-lambda';
+import { Duration } from 'aws-cdk-lib';
 
 export class CdkStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
@@ -57,6 +58,10 @@ export class CdkStack extends cdk.Stack {
     const applyAPIKeyLambda = new lambda.Function(this, "applyAPIKeyLambda", {
       runtime: lambda.Runtime.DOTNET_6,
       handler: "applyAPIKeyLambda::applyAPIKeyLambda.Function::FunctionHandler",
+      timeout: Duration.seconds(10),
+      environment: {
+        APIKEYSTABLE: APIKeysTable.tableName
+      },
       code: lambda.Code.fromAsset(
         path.join(__dirname, "../../lambdas/applyAPIKeyLambda/src/applyAPIKeyLambda"), assetOpt)
     });
@@ -64,6 +69,11 @@ export class CdkStack extends cdk.Stack {
     const operateAPIKeyLambda = new lambda.Function(this, "operateAPIKeyLambda", {
       runtime: lambda.Runtime.DOTNET_6,
       handler: "operateAPIKeyLambda::operateAPIKeyLambda.Function::FunctionHandler",
+      timeout: Duration.seconds(10),
+      environment: {
+        APIKEYSTABLE: APIKeysTable.tableName,
+        OPERATORSTABLE: operatorsTable.tableName
+      },
       code: lambda.Code.fromAsset(
         path.join(__dirname, "../../lambdas/operateAPIKeyLambda/src/operateAPIKeyLambda"), assetOpt)
     });
@@ -71,16 +81,35 @@ export class CdkStack extends cdk.Stack {
     const sendPasscodeLambda = new lambda.Function(this, "sendPasscodeLambda", {
       runtime: lambda.Runtime.DOTNET_6,
       handler: "sendPasscodeLambda::sendPasscodeLambda.Function::FunctionHandler",
+      timeout: Duration.seconds(10),
+      environment: {
+        APIKEYSTABLE: APIKeysTable.tableName,
+        PASSCODETABLE: passcodeTable.tableName
+      },
       code: lambda.Code.fromAsset(
-        path.join(__dirname, "../../lambdas/sendPasscodeLambda/src/sendPasscodeLambda"), assetOpt),
+        path.join(__dirname, "../../lambdas/sendPasscodeLambda/src/sendPasscodeLambda"), assetOpt)
     });
 
     const verifyPasscodeLambda = new lambda.Function(this, "verifyPasscodeLambda", {
       runtime: lambda.Runtime.DOTNET_6,
       handler: "verifyPasscodeLambda::verifyPasscodeLambda.Function::FunctionHandler",
+      timeout: Duration.seconds(10),
+      environment: {
+        PASSCODETABLE: passcodeTable.tableName,
+      },
       code: lambda.Code.fromAsset(
         path.join(__dirname, "../../lambdas/verifyPasscodeLambda/src/verifyPasscodeLambda"), assetOpt),
     });
+
+    APIKeysTable.grantFullAccess(applyAPIKeyLambda);
+
+    APIKeysTable.grantFullAccess(operateAPIKeyLambda);
+    operatorsTable.grantFullAccess(operateAPIKeyLambda);
+
+    APIKeysTable.grantFullAccess(sendPasscodeLambda);
+    passcodeTable.grantFullAccess(sendPasscodeLambda);
+
+    passcodeTable.grantFullAccess(verifyPasscodeLambda);
 
     const funcUrlOptions = {
       authType: lambda.FunctionUrlAuthType.NONE,
