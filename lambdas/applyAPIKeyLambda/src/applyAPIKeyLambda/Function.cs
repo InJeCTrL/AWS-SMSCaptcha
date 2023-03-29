@@ -33,7 +33,8 @@ public class Function
         JsonObject result = new();
         result.Add("statusCode", 200);
         result.Add("headers", new JsonObject());
-        result["headers"]!.AsObject().Add("Access-Control-Allow-Origin", "*");
+        result["headers"]!.AsObject().Add("Access-Control-Allow-Origin",
+            Environment.GetEnvironmentVariable("CORSORIGIN"));
 
         var config = new DynamoDBOperationConfig();
         config.OverrideTableName = Environment.GetEnvironmentVariable("APIKEYSTABLE");

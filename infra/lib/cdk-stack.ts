@@ -13,20 +13,6 @@ export class CdkStack extends cdk.Stack {
 
     const topic = new sns.Topic(this, 'passcodeTopic');
 
-    const operatorsTable = new dynamodb.Table(this, "AWS_SMSCaptcha_Operators", {
-      partitionKey: {
-        name: 'guid',
-        type: dynamodb.AttributeType.STRING
-      }
-    });
-
-    const APIKeysTable = new dynamodb.Table(this, "AWS_SMSCaptcha_API_Keys", {
-      partitionKey: {
-        name: 'guid',
-        type: dynamodb.AttributeType.STRING
-      }
-    });
-
     const passcodeTable = new dynamodb.Table(this, "AWS_SMSCaptcha_Codes", {
       partitionKey: {
         name: 'guid',
@@ -55,36 +41,14 @@ export class CdkStack extends cdk.Stack {
       }
     };
 
-    const applyAPIKeyLambda = new lambda.Function(this, "applyAPIKeyLambda", {
-      runtime: lambda.Runtime.DOTNET_6,
-      handler: "applyAPIKeyLambda::applyAPIKeyLambda.Function::FunctionHandler",
-      timeout: Duration.seconds(10),
-      environment: {
-        APIKEYSTABLE: APIKeysTable.tableName
-      },
-      code: lambda.Code.fromAsset(
-        path.join(__dirname, "../../lambdas/applyAPIKeyLambda/src/applyAPIKeyLambda"), assetOpt)
-    });
-
-    const operateAPIKeyLambda = new lambda.Function(this, "operateAPIKeyLambda", {
-      runtime: lambda.Runtime.DOTNET_6,
-      handler: "operateAPIKeyLambda::operateAPIKeyLambda.Function::FunctionHandler",
-      timeout: Duration.seconds(10),
-      environment: {
-        APIKEYSTABLE: APIKeysTable.tableName,
-        OPERATORSTABLE: operatorsTable.tableName
-      },
-      code: lambda.Code.fromAsset(
-        path.join(__dirname, "../../lambdas/operateAPIKeyLambda/src/operateAPIKeyLambda"), assetOpt)
-    });
-
     const sendPasscodeLambda = new lambda.Function(this, "sendPasscodeLambda", {
       runtime: lambda.Runtime.DOTNET_6,
       handler: "sendPasscodeLambda::sendPasscodeLambda.Function::FunctionHandler",
       timeout: Duration.seconds(10),
       environment: {
-        APIKEYSTABLE: APIKeysTable.tableName,
-        PASSCODETABLE: passcodeTable.tableName
+        PERMISSIONID: process.env.PERMISSIONID || '',
+        PASSCODETABLE: passcodeTable.tableName,
+        CORSORIGIN: process.env.CORS_ORIGIN || ''
       },
       code: lambda.Code.fromAsset(
         path.join(__dirname, "../../lambdas/sendPasscodeLambda/src/sendPasscodeLambda"), assetOpt)
@@ -96,19 +60,15 @@ export class CdkStack extends cdk.Stack {
       timeout: Duration.seconds(10),
       environment: {
         PASSCODETABLE: passcodeTable.tableName,
+        CORSORIGIN: process.env.CORS_ORIGIN || ''
       },
       code: lambda.Code.fromAsset(
         path.join(__dirname, "../../lambdas/verifyPasscodeLambda/src/verifyPasscodeLambda"), assetOpt),
     });
 
-    APIKeysTable.grantFullAccess(applyAPIKeyLambda);
+    topic.grantPublish(sendPasscodeLambda);
 
-    APIKeysTable.grantFullAccess(operateAPIKeyLambda);
-    operatorsTable.grantFullAccess(operateAPIKeyLambda);
-
-    APIKeysTable.grantFullAccess(sendPasscodeLambda);
     passcodeTable.grantFullAccess(sendPasscodeLambda);
-
     passcodeTable.grantFullAccess(verifyPasscodeLambda);
 
     const funcUrlOptions = {
@@ -118,9 +78,8 @@ export class CdkStack extends cdk.Stack {
       }
     };
 
-    const applyAPIKeyLambdaURL = applyAPIKeyLambda.addFunctionUrl(funcUrlOptions);
-    const operateAPIKeyLambdaURL = operateAPIKeyLambda.addFunctionUrl(funcUrlOptions);
     const sendPasscodeLambdaURL = sendPasscodeLambda.addFunctionUrl(funcUrlOptions);
     const verifyPasscodeLambdaURL = verifyPasscodeLambda.addFunctionUrl(funcUrlOptions);
+
   }
 }
