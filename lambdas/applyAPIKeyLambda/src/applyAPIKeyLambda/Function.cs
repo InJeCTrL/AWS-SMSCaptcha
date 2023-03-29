@@ -38,7 +38,8 @@ public class Function
         var config = new DynamoDBOperationConfig();
         config.OverrideTableName = Environment.GetEnvironmentVariable("APIKEYSTABLE");
 
-        if (lambdaEvent.ContainsKey("rawQueryString"))
+        if (lambdaEvent.ContainsKey("rawQueryString") &&
+            !string.IsNullOrEmpty(lambdaEvent["rawQueryString"]!.ToString()))
         {
             var guid = lambdaEvent["rawQueryString"]!.ToString();
 
@@ -49,7 +50,7 @@ public class Function
                     var apiKeyObj = await dBContext.LoadAsync<APIKey>(guid, config);
                     if (apiKeyObj == null)
                     {
-                        result["statusCode"] = 400;
+                        result["statusCode"] = 404;
                     }
                     else
                     {
