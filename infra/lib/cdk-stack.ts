@@ -17,10 +17,6 @@ export class CdkStack extends cdk.Stack {
       partitionKey: {
         name: 'guid',
         type: dynamodb.AttributeType.STRING
-      },
-      sortKey: {
-        name: 'api_key',
-        type: dynamodb.AttributeType.STRING
       }
     });
 
@@ -81,5 +77,6 @@ export class CdkStack extends cdk.Stack {
     const sendPasscodeLambdaURL = sendPasscodeLambda.addFunctionUrl(funcUrlOptions);
     const verifyPasscodeLambdaURL = verifyPasscodeLambda.addFunctionUrl(funcUrlOptions);
 
+    sendPasscodeLambda.addEnvironment("VERIFYURL", verifyPasscodeLambdaURL.url);
   }
 }

@@ -18,7 +18,6 @@ public class Function
     {
         [DynamoDBHashKey]
         public string guid { get; set; } = Guid.NewGuid().ToString();
-        [DynamoDBRangeKey]
         public string api_key { get; set; }
         public string code { get; set; }
         public long expire_duration { get; set; }
@@ -39,6 +38,7 @@ public class Function
         result.Add("headers", new JsonObject());
         result["headers"]!.AsObject().Add("Access-Control-Allow-Origin",
             Environment.GetEnvironmentVariable("CORSORIGIN"));
+        result.Add("body", new JsonObject());
 
         var permissionId = Environment.GetEnvironmentVariable("PERMISSIONID")!;
 
@@ -53,7 +53,7 @@ public class Function
         passcodesTableConfig.OverrideTableName = Environment.GetEnvironmentVariable("PASSCODETABLE");
 
         var data = Encoding.Default.GetString(
-            Convert.FromBase64String(lambdaEvent["data"]!.ToString()));
+            Convert.FromBase64String(lambdaEvent["body"]!.ToString()));
 
         var props = new Dictionary<string, string>();
         var propParts = data.Split('&');
@@ -66,6 +66,15 @@ public class Function
             props.Add(field, value);
         }
 
+        if (!props.ContainsKey("expire_duration") ||
+            !props.ContainsKey("code") ||
+            !props.ContainsKey("prefix") ||
+            !props.ContainsKey("tip") ||
+            !props.ContainsKey("phone"))
+        {
+            return result;
+        }
+
         var passcode = new Passcode
         {
             api_key = permissionId,
@@ -73,20 +82,11 @@ public class Function
             expire_duration = int.Parse(props["expire_duration"])
         };
 
-        using (AmazonDynamoDBClient client = new AmazonDynamoDBClient())
-        {
-            using (DynamoDBContext dBContext = new DynamoDBContext(client))
-            {
-                await dBContext.SaveAsync<Passcode>(passcode, passcodesTableConfig);
-                result.Add("body", JsonSerializer.Serialize<Passcode>(passcode));
-            }
-        }
-
-        using (AmazonSimpleNotificationServiceClient client = new AmazonSimpleNotificationServiceClient())
+        using (AmazonSimpleNotificationServiceClient smsclient = new AmazonSimpleNotificationServiceClient())
         {
             PublishRequest publishReq = new PublishRequest()
             {
-                Message = $"{props["prefix"]}",
+                Message = $"[{props["prefix"]}] Your one-time passcode is {props["code"]}. {props["tip"]}",
                 PhoneNumber = props["phone"],
                 MessageAttributes = new()
                 {
@@ -97,13 +97,27 @@ public class Function
 
             try
             {
-                PublishResponse response = await client.PublishAsync(publishReq);
-                result.Add("sendResponse", JsonSerializer.SerializeToNode<PublishResponse>(response));
+                PublishResponse response = await smsclient.PublishAsync(publishReq);
+                result["body"]!.AsObject().Add(
+                    "sendResponse", JsonSerializer.SerializeToNode<PublishResponse>(response));
                 result["statusCode"] = 200;
+                result["body"]!.AsObject().Add(
+                    "verifyCallback", Environment.GetEnvironmentVariable("VERIFYURL")!);
+
+                using (AmazonDynamoDBClient dBClient = new AmazonDynamoDBClient())
+                {
+                    using (DynamoDBContext dBContext = new DynamoDBContext(dBClient))
+                    {
+                        await dBContext.SaveAsync<Passcode>(passcode, passcodesTableConfig);
+                        result["body"]!.AsObject().Add(
+                            "passcode", JsonSerializer.SerializeToNode<Passcode>(passcode));
+                    }
+                }
             }
             catch(Exception ex)
             {
-                result.Add("errorTip", ex.ToString());
+                result["body"]!.AsObject().Add(
+                    "errorTip", ex.ToString());
             }
         }
 
